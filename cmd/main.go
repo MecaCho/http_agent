@@ -2,6 +2,6 @@ package main
 
 import "node_install_agent"
 
-func main(){
+func main() {
 	node_install_agent.StartServer()
 }

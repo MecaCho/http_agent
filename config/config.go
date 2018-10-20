@@ -3,11 +3,10 @@ package config
 import "flag"
 
 var (
-	ServerIP string
+	ServerIP   string
 	ServerPort int
-	EMUrl string
+	EMUrl      string
 )
-
 
 func init() {
 
