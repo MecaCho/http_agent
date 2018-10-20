@@ -34,7 +34,6 @@ type NodeInstallStatusPut struct {
 type InstallAgent struct {
 	EMClient http.Client
 	ProjectID string
-	Name string
 	PH string
 }
 
@@ -44,6 +43,18 @@ func (ag *InstallAgent)EdgeInstallPost(w http.ResponseWriter, r *http.Request, p
 	nodeID := p.ByName("node_id")
 	installType := p.ByName("type")
 	glog.Infof("Get node install info request from edged host: %s", r.Host)
+	//err := ph.validateCert(r)
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
+	//	http.Error(w, "", http.StatusUnauthorized)
+	//	return
+	//}
+	//name, projectID, err := getUserInfoFromCert(r.TLS.PeerCertificates[0])
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
+	//	http.Error(w, "", http.StatusBadRequest)
+	//	return
+	//}
 	projectID := ag.ProjectID
 	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/%s", config.EMUrl, projectID, nodeID, installType)
 	requestBody, err := ioutil.ReadAll(r.Body)
@@ -114,6 +125,18 @@ func (ag *InstallAgent)EdgeInstallPost(w http.ResponseWriter, r *http.Request, p
 func (ag *InstallAgent)EdgeInstallPutNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	nodeID := p.ByName("node_id")
 	glog.Infof("Put node install status request from edged host: %s", r.Host)
+	//err := ph.validateCert(r)
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
+	//	http.Error(w, "", http.StatusUnauthorized)
+	//	return
+	//}
+	//name, projectID, err := getUserInfoFromCert(r.TLS.PeerCertificates[0])
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
+	//	http.Error(w, "", http.StatusBadRequest)
+	//	return
+	//}
 	projectID := ag.ProjectID
 
 	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", config.EMUrl, projectID, nodeID)
@@ -150,6 +173,18 @@ func (ag *InstallAgent)EdgeInstallPutNodeStatus(w http.ResponseWriter, r *http.R
 func (ag *InstallAgent)EdgeInstallGetNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	nodeID := p.ByName("node_id")
 	glog.Infof("Get node install status request from edged host: %s", r.Host)
+	//err := ph.validateCert(r)
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
+	//	http.Error(w, "", http.StatusUnauthorized)
+	//	return
+	//}
+	//name, projectID, err := getUserInfoFromCert(r.TLS.PeerCertificates[0])
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
+	//	http.Error(w, "", http.StatusBadRequest)
+	//	return
+	//}
 	projectID := ag.ProjectID
 
 	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", config.EMUrl, projectID, nodeID)
@@ -220,7 +255,6 @@ func StartServer() {
 
 	ag := InstallAgent{
 		edgeMgrClient,
-		"",
 		"",
 		"",
 	}
