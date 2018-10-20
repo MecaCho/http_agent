@@ -31,25 +31,21 @@ type NodeInstallStatusPut struct {
 	Reason       string `json:"reason"`
 }
 
+type InstallAgent struct {
+	EMClient http.Client
+	ProjectID string
+	Name string
+	PH string
+}
 
-func EdgeInstallPost(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+
+
+func (ag *InstallAgent)EdgeInstallPost(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	nodeID := p.ByName("node_id")
 	installType := p.ByName("type")
 	glog.Infof("Get node install info request from edged host: %s", r.Host)
-	//err := ph.validateCert(r)
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-	//	http.Error(w, "", http.StatusUnauthorized)
-	//	return
-	//}
-	//name, projectID, err := getUserInfoFromCert(r.TLS.PeerCertificates[0])
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-	//	http.Error(w, "", http.StatusBadRequest)
-	//	return
-	//}
-	projectID := "f91453f0f3f94c15897764935b2d61c6"
-	urlEdgeMgr := fmt.Sprintf("http://192.145.62.56:8143/v1/%s/edgemgr_internal/nodes/%s/installinfo/%s", projectID, nodeID, installType)
+	projectID := ag.ProjectID
+	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/%s", config.EMUrl, projectID, nodeID, installType)
 	requestBody, err := ioutil.ReadAll(r.Body)
 	if err != nil{
 		glog.Errorf("")
@@ -63,10 +59,7 @@ func EdgeInstallPost(w http.ResponseWriter, r *http.Request, p httprouter.Params
 		return
 	}
 	req.Header.Set("Content-type", "application/json;charset=utf8")
-	edgeMgrClient := http.Client{
-		Timeout:time.Second * 30,
-	}
-	resp, err := edgeMgrClient.Do(req)
+	resp, err := ag.EMClient.Do(req)
 	if err != nil{
 		glog.Errorln("")
 		return
@@ -101,7 +94,6 @@ func EdgeInstallPost(w http.ResponseWriter, r *http.Request, p httprouter.Params
 	}
 
 	var body InstallInfoResponse
-	//body := make(map[string]interface{})
 	fmt.Println(string(respContent))
 	err = json.Unmarshal(respContent, &body)
 	if err != nil{
@@ -119,40 +111,12 @@ func EdgeInstallPost(w http.ResponseWriter, r *http.Request, p httprouter.Params
 
 
 
-func EdgeInstallPutNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+func (ag *InstallAgent)EdgeInstallPutNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	nodeID := p.ByName("node_id")
 	glog.Infof("Put node install status request from edged host: %s", r.Host)
-	//err := ph.validateCert(r)
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-	//	http.Error(w, "", http.StatusUnauthorized)
-	//	return
-	//}
-	//name, projectID, err := getUserInfoFromCert(r.TLS.PeerCertificates[0])
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-	//	http.Error(w, "", http.StatusBadRequest)
-	//	return
-	//}
-	projectID := "f91453f0f3f94c15897764935b2d61c6"
+	projectID := ag.ProjectID
 
-	//length := r.ContentLength
-
-	//putBody := make([]byte, length)
-	//r.Body.Read(putBody)
-	//putBody, err := ioutil.ReadAll(r.Body)
-	//var requestBody io.Reader
-	//if  != "" {
-	//	requestBody = bytes.NewBufferString(putBody)
-	//}
-	//if err != nil{
-	//	glog.Errorf("Put node install status error , %s", err)
-	//	return
-	//}
-	//var putBodyStruct NodeInstallStatusPut
-	//err := json.Unmarshal(putBody, &putBodyStruct)
-
-	urlEdgeMgr := fmt.Sprintf("http://192.145.62.56:8143/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", projectID, nodeID)
+	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", config.EMUrl, projectID, nodeID)
 	requestBody, err := ioutil.ReadAll(r.Body)
 	if err != nil{
 		glog.Errorf("")
@@ -166,10 +130,7 @@ func EdgeInstallPutNodeStatus(w http.ResponseWriter, r *http.Request, p httprout
 		return
 	}
 	req.Header.Set("Content-type", "application/json;charset=utf8")
-	edgeMgrClient := http.Client{
-		Timeout:time.Second * 30,
-	}
-	resp, err := edgeMgrClient.Do(req)
+	resp, err := ag.EMClient.Do(req)
 	if err != nil{
 		glog.Errorf("Put node install status error, %s", err)
 		return
@@ -186,50 +147,19 @@ func EdgeInstallPutNodeStatus(w http.ResponseWriter, r *http.Request, p httprout
 }
 
 
-func EdgeInstallGetNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+func (ag *InstallAgent)EdgeInstallGetNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	nodeID := p.ByName("node_id")
 	glog.Infof("Get node install status request from edged host: %s", r.Host)
-	//err := ph.validateCert(r)
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-	//	http.Error(w, "", http.StatusUnauthorized)
-	//	return
-	//}
-	//name, projectID, err := getUserInfoFromCert(r.TLS.PeerCertificates[0])
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-	//	http.Error(w, "", http.StatusBadRequest)
-	//	return
-	//}
-	projectID := "f91453f0f3f94c15897764935b2d61c6"
+	projectID := ag.ProjectID
 
-	//length := r.ContentLength
-
-	//putBody := make([]byte, length)
-	//r.Body.Read(putBody)
-	//putBody, err := ioutil.ReadAll(r.Body)
-	//var requestBody io.Reader
-	//if  != "" {
-	//	requestBody = bytes.NewBufferString(putBody)
-	//}
-	//if err != nil{
-	//	glog.Errorf("Put node install status error , %s", err)
-	//	return
-	//}
-	//var putBodyStruct NodeInstallStatusPut
-	//err := json.Unmarshal(putBody, &putBodyStruct)
-
-	urlEdgeMgr := fmt.Sprintf("http://192.145.62.56:8143/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", projectID, nodeID)
+	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", config.EMUrl, projectID, nodeID)
 	req, err := http.NewRequest(http.MethodGet, urlEdgeMgr, nil)
 	if err != nil{
 		glog.Errorf("Put node install status error, %s", err)
 		return
 	}
 	req.Header.Set("Content-type", "application/json;charset=utf8")
-	edgeMgrClient := http.Client{
-		Timeout:time.Second * 30,
-	}
-	resp, err := edgeMgrClient.Do(req)
+	resp, err := ag.EMClient.Do(req)
 	if err != nil{
 		glog.Errorf("Put node install status error, %s", err)
 		return
@@ -246,23 +176,11 @@ func EdgeInstallGetNodeStatus(w http.ResponseWriter, r *http.Request, p httprout
 }
 
 //
-func EdgePost(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+func (ag *InstallAgent)EdgePost(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	nodeID := p.ByName("post_node_id")
 	projectID := p.ByName("project_id")
 	glog.Infof("Get node install info request from edged host: %s", r.Host)
-	//err := ph.validateCert(r)
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-	//	http.Error(w, "", http.StatusUnauthorized)
-	//	return
-	//}
-	//name, projectID, err := getUserInfoFromCert(r.TLS.PeerCertificates[0])
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-	//	http.Error(w, "", http.StatusBadRequest)
-	//	return
-	//}
-	urlEdgeMgr := fmt.Sprintf("http://192.145.62.56:8143/v1/%s/edgemgr/nodes/%s/upgrade", projectID, nodeID)
+	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr/nodes/%s/upgrade", config.EMUrl, projectID, nodeID)
 	req, err := http.NewRequest(http.MethodPost, urlEdgeMgr, nil)
 	fmt.Println(urlEdgeMgr)
 	if err != nil{
@@ -271,10 +189,7 @@ func EdgePost(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	req.Header.Set("Content-type", "application/json;charset=utf8")
 	req.Header.Set("X-Auth-Token", "token")
-	edgeMgrClient := http.Client{
-		Timeout:time.Second * 30,
-	}
-	resp, err := edgeMgrClient.Do(req)
+	resp, err := ag.EMClient.Do(req)
 	if err != nil{
 		glog.Errorln("")
 		return
@@ -287,16 +202,8 @@ func EdgePost(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 }
 
 
-// StartServer starts the placement service
+// StartServer starts the node_install_agent service
 func StartServer() {
-	//config, err := InitPlacementConfig()
-	//if err != nil {
-	//	panic(err)
-	//}
-	//ph, err := newPlacementHandle(config)
-	//if err != nil {
-	//	panic(err)
-	//}
 	//cert, err := tls.X509KeyPair(config.certData, config.keyData)
 	//if err != nil {
 	//	panic(err)
@@ -307,26 +214,22 @@ func StartServer() {
 	//Certificates: []tls.Certificate{cert},
 	//}
 
-	//if config.initDB {
-	//	migrate(config.dbConnStr)
-	//}
+	edgeMgrClient := http.Client{
+		Timeout:time.Second * 30,
+	}
 
-	// never stop
-	//stop := make(chan bool)
-	//go ph.syncMetrics(stop)
+	ag := InstallAgent{
+		edgeMgrClient,
+		"",
+		"",
+		"",
+	}
 
-	//mux := http.NewServeMux()
-	//mux.HandleFunc("/v1/placement_external/message_queue", ph.ServeGetMQ)
-	//mux.HandleFunc("/v1/placement_external/nodes/:node_id/installinfo", EdgeInstallServer)
-	//httprouter.New()
 	mux_new := httprouter.New()
-	//mux_new.GET("/v1/placement_external/nodes/:node_id/installinfo/:type", EdgeInstallPost)
-	//http://{{url}}:{{port}}/v1/{{project_id}}/edgemgr/nodes/{{post_node_id}}/upgrade
-	//	mux_new.POST("/v1/:project_id/edgemgr/nodes/:post_node_id/upgrade", EdgePost)
-	mux_new.POST("/v1/placement_external/nodes/:node_id/installinfo/:type", EdgeInstallPost)
-	mux_new.PUT("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", EdgeInstallPutNodeStatus)
-	mux_new.GET("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", EdgeInstallGetNodeStatus)
-	//config.
+	mux_new.POST("/v1/placement_external/nodes/:node_id/installinfo/:type", ag.EdgeInstallPost)
+	mux_new.PUT("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", ag.EdgeInstallPutNodeStatus)
+	mux_new.GET("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", ag.EdgeInstallGetNodeStatus)
+	mux_new.POST("/v1/placement_external/nodes/:node_id/upgrade", ag.EdgePost)
 
 
 	s := &http.Server{
@@ -337,8 +240,6 @@ func StartServer() {
 		//ErrorLog:    log.New(&filterWriter{}, "", log.LstdFlags),
 	}
 	glog.Info("Start placement server")
-	//go startMetricServer(fmt.Sprintf("%s:%d", config.placementAddress, config.metricPort))
-	//go startRouterServer(config, ph)
 	//s.ListenAndServeTLS("", "")
 	s.ListenAndServe()
 }
