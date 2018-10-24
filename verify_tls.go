@@ -1,4 +1,13 @@
-func getUserInfoFromCert(cert *x509.Certificate) (string, string, error) {
+package node_install_agent
+
+import (
+	"crypto/x509"
+	"strings"
+	"net/http"
+	"fmt"
+)
+
+func GetUserInfoFromCert(cert *x509.Certificate) (string, string, error) {
 	user := ""
 	project := ""
 	for _, i := range cert.Subject.Names {
@@ -21,7 +30,7 @@ func getUserInfoFromCert(cert *x509.Certificate) (string, string, error) {
 	return tokens[len(tokens)-1], project, nil
 }
 
-func (ha *Handle) validateCert(r *http.Request) error {
+func (ha *InstallAgent) ValidateCert(r *http.Request) error {
 	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
 		return fmt.Errorf("no tls certificate provided")
 	}
