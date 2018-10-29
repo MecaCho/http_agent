@@ -1,42 +1,63 @@
-package node_install_agent
+package install_agent_cert
 
 import (
+	"crypto/x509"
+	"reflect"
 	"testing"
 	"net/http"
+	//"errors"
 	"fmt"
 	"io/ioutil"
-	"net/http/httptest"
-	"time"
-	"httprouter"
-	"reflect"
 	"strings"
 	"monkey"
+	"time"
+	"httprouter"
+	//"net/http/httptest"
 )
 
 func TestStartServer(t *testing.T) {
+	fakeCA := ""
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM([]byte(fakeCA))
+	opts := x509.VerifyOptions{
+		Roots: pool,
+		KeyUsages: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageServerAuth,
+			x509.ExtKeyUsageClientAuth},
+	}
 	edgeMgrClient := http.Client{
 		Timeout: time.Second * 30,
 	}
-	ag := InstallAgent{
-		edgeMgrClient,
-	}
-	p := httprouter.Params{}
-	testMux := httprouter.New()
-	testMux.GET("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", ag.EdgeInstallGetNodeStatus)
-	w := httptest.NewRecorder()
 
-	defer monkey.UnpatchInstanceMethod(reflect.TypeOf(&ag.EMClient), "Do")
-	monkey.PatchInstanceMethod(reflect.TypeOf(&ag.EMClient), "Do",
-		func(_ *http.Client, _ *http.Request) (*http.Response, error) {
+	ph := EMClient{
+		verifyOpts: opts,
+		edgeAPIURL: "fake_url",
+		edgeAPIVersion: "v2",
+		edgeClient: edgeMgrClient,
+	}
+
+	// request to edgemgr error
+	defer monkey.UnpatchInstanceMethod(reflect.TypeOf(&ph.edgeClient), "Get")
+	monkey.PatchInstanceMethod(reflect.TypeOf(&ph.edgeClient), "Get",
+		func(_ *http.Client, _ string) (*http.Response, error) {
 			body := "{\"state\":\"UPGRADING\"}"
 			resp := http.Response{StatusCode: http.StatusOK, Body: ioutil.NopCloser(strings.NewReader(body))}
 			return &resp, nil
 		})
+	//p := httprouter.Params{}
 
-	req := httptest.NewRequest("GET", "/v1/placement_external/nodes/:node_id/installinfo/nodestatus", nil)
-	ag.EdgeInstallGetNodeStatus(w, req, p)
 
-	resp := w.Result()
+	testMux := httprouter.New()
+	testMux.GET("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", ph.CheckAuthorition(LogUpgrade(ph.installerGetNodeSatus)))
+	//w := httptest.NewRecorder()
+	//
+	//req := httptest.NewRequest("GET", "/v1/placement_external/nodes/:node_id/installinfo/nodestatus", nil)
+	//ag.EdgeInstallGetNodeStatus(w, req, p)
+
+	resp, err := http.Get("/v1/placement_external/nodes/:node_id/installinfo/nodestatus")
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 	body, _ := ioutil.ReadAll(resp.Body)
 
 	fmt.Println(resp.StatusCode)
@@ -45,13 +66,15 @@ func TestStartServer(t *testing.T) {
 
 }
 
+
 //func TestAgent(t *testing.T) {
 //	// var defined here
 //	name := "fakeName"
 //	project := "fakeProject"
 //
+//	accessURL := "access_url"
+//	mqURLForEdged := "edged_url"
 //	mqURLForManager := "manager_url"
-//	fakeCA := ""
 //
 //	pool := x509.NewCertPool()
 //	pool.AppendCertsFromPEM([]byte(fakeCA))
@@ -63,9 +86,9 @@ func TestStartServer(t *testing.T) {
 //	}
 //
 //
-//	ph := InstallAgent{
-//		//verifyOpts: opts,
-//		//edgeAPIURL: "fake_url",
+//	ph := Handle{
+//		verifyOpts: opts,
+//		edgeAPIURL: "fake_url",
 //	}
 //
 //	// request to edgemgr error
@@ -102,3 +125,4 @@ func TestStartServer(t *testing.T) {
 //	url, _ = ph.QueryAssignedMQ(name, project)
 //	AssertStringEqual(t, "", url, "QueryAssignedMQ return is not match")
 //}
+

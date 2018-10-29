@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"node_install_agent/config"
 	"time"
-	"crypto/tls"
+	//"crypto/tls"
 )
 
 type InstallInfoResponse struct {
@@ -40,18 +40,19 @@ func (ag *InstallAgent) EdgeInstallPost(w http.ResponseWriter, r *http.Request, 
 	nodeID := p.ByName("node_id")
 	installType := p.ByName("type")
 	glog.Infof("Get node install info request from edged host: %s", r.Host)
-	err := ag.ValidateCert(r)
-	if err != nil {
-		glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-		http.Error(w, "", http.StatusUnauthorized)
-		return
-	}
-	name, projectID, err := GetUserInfoFromCert(r.TLS.PeerCertificates[0])
-	if err != nil {
-		glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-		http.Error(w, "", http.StatusBadRequest)
-		return
-	}
+	//err := ag.ValidateCert(r)
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
+	//	http.Error(w, "", http.StatusUnauthorized)
+	//	return
+	//}
+	//name, projectID, err := GetUserInfoFromCert(r.TLS.PeerCertificates[0])
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
+	//	http.Error(w, "", http.StatusBadRequest)
+	//	return
+	//}
+	projectID := ""
 	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/%s", config.EMUrl, projectID, nodeID, installType)
 	requestBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -119,19 +120,19 @@ func (ag *InstallAgent) EdgeInstallPost(w http.ResponseWriter, r *http.Request, 
 func (ag *InstallAgent) EdgeInstallPutNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	nodeID := p.ByName("node_id")
 	glog.Infof("Put node install status request from edged host: %s", r.Host)
-	err := ag.ValidateCert(r)
-	if err != nil {
-		glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-		http.Error(w, "", http.StatusUnauthorized)
-		return
-	}
-	name, projectID, err := GetUserInfoFromCert(r.TLS.PeerCertificates[0])
-	if err != nil {
-		glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-		http.Error(w, "", http.StatusBadRequest)
-		return
-	}
-
+	//err := ag.ValidateCert(r)
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
+	//	http.Error(w, "", http.StatusUnauthorized)
+	//	return
+	//}
+	//name, projectID, err := GetUserInfoFromCert(r.TLS.PeerCertificates[0])
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
+	//	http.Error(w, "", http.StatusBadRequest)
+	//	return
+	//}
+	projectID := ""
 	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", config.EMUrl, projectID, nodeID)
 	requestBody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -165,19 +166,19 @@ func (ag *InstallAgent) EdgeInstallPutNodeStatus(w http.ResponseWriter, r *http.
 func (ag *InstallAgent) EdgeInstallGetNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	nodeID := p.ByName("node_id")
 	glog.Infof("Get node install status request from edged host: %s", r.Host)
-	err := ag.ValidateCert(r)
-	if err != nil {
-		glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-		http.Error(w, "", http.StatusUnauthorized)
-		return
-	}
-	name, projectID, err := GetUserInfoFromCert(r.TLS.PeerCertificates[0])
-	if err != nil {
-		glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-		http.Error(w, "", http.StatusBadRequest)
-		return
-	}
-
+	//err := ag.ValidateCert(r)
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
+	//	http.Error(w, "", http.StatusUnauthorized)
+	//	return
+	//}
+	//name, projectID, err := GetUserInfoFromCert(r.TLS.PeerCertificates[0])
+	//if err != nil {
+	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
+	//	http.Error(w, "", http.StatusBadRequest)
+	//	return
+	//}
+	projectID := ""
 	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", config.EMUrl, projectID, nodeID)
 	req, err := http.NewRequest(http.MethodGet, urlEdgeMgr, nil)
 	if err != nil {
@@ -229,15 +230,15 @@ func (ag *InstallAgent) EdgePost(w http.ResponseWriter, r *http.Request, p httpr
 
 // StartServer starts the node_install_agent service
 func StartServer() {
-	cert, err := tls.X509KeyPair(config.CertData, config.KeyData)
-	if err != nil {
-		panic(err)
-	}
-	tlsConfig := tls.Config{
-		ClientCAs:    ph.verifyOpts.Roots,
-	ClientAuth:   tls.RequestClientCert,
-	Certificates: []tls.Certificate{cert},
-	}
+	//cert, err := tls.X509KeyPair(config.CertData, config.KeyData)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//tlsConfig := tls.Config{
+	//	ClientCAs:    ph.verifyOpts.Roots,
+	//	ClientAuth:   tls.RequestClientCert,
+	//	Certificates: []tls.Certificate{cert},
+	//}
 
 	edgeMgrClient := http.Client{
 		Timeout: time.Second * 30,
@@ -256,11 +257,11 @@ func StartServer() {
 	s := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", config.ServerIP, config.ServerPort),
 		Handler: muxNew,
-		TLSConfig:   &tlsConfig,
+		//TLSConfig:   &tlsConfig,
 		IdleTimeout: 30 * time.Second,
 		//ErrorLog:    log.New(&filterWriter{}, "", log.LstdFlags),
 	}
 	glog.Info("Start placement server")
-	s.ListenAndServeTLS("", "")
-	//s.ListenAndServe()
+	//s.ListenAndServeTLS("", "")
+	s.ListenAndServe()
 }
