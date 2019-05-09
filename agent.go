@@ -1,19 +1,34 @@
 package node_install_agent
 
+
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"glog"
 	"httprouter"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"node_install_agent/config"
+	"net/url"
+	"reflect"
+	"runtime"
+	"strings"
 	"time"
-	//"crypto/tls"
 )
 
+const upgradeURLinEdgeMgr = "%s/edgemgr_internal/nodes/%s/installinfo"
+
+// serverResponse is a wrapper for http API responses.
+type serverResponse struct {
+	body       []byte
+	header     http.Header
+	statusCode int
+	reqURL     *url.URL
+}
+
+type header map[string][]string
+
+//InstallInfoResponse node install get plan version from edgemanager
 type InstallInfoResponse struct {
 	MajorVersion    int                    `json:"major_version"`
 	MinorVersion    int                    `json:"minor_version"`
@@ -23,6 +38,7 @@ type InstallInfoResponse struct {
 	StartParameters map[string]interface{} `json:"start_parameters"`
 }
 
+//NodeInstallStatusPut node install put upgrade result to edgemanager
 type NodeInstallStatusPut struct {
 	MajorVersion string `json:"major_version"`
 	MinorVersion string `json:"minor_version"`
@@ -32,200 +48,156 @@ type NodeInstallStatusPut struct {
 	Reason       string `json:"reason"`
 }
 
-type InstallAgent struct {
-	EMClient  http.Client
-}
+type upgradeHandle func(http.ResponseWriter, *http.Request, string)
 
-func (ag *InstallAgent) EdgeInstallPost(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	nodeID := p.ByName("node_id")
-	installType := p.ByName("type")
-	glog.Infof("Get node install info request from edged host: %s", r.Host)
-	//err := ag.ValidateCert(r)
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-	//	http.Error(w, "", http.StatusUnauthorized)
-	//	return
-	//}
-	//name, projectID, err := GetUserInfoFromCert(r.TLS.PeerCertificates[0])
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-	//	http.Error(w, "", http.StatusBadRequest)
-	//	return
-	//}
-	projectID := ""
-	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/%s", config.EMUrl, projectID, nodeID, installType)
-	requestBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		glog.Errorf("")
-		return
-	}
-	reader := bytes.NewReader(requestBody)
-	req, err := http.NewRequest(http.MethodPost, urlEdgeMgr, reader)
-	fmt.Println(urlEdgeMgr, string(requestBody))
-	if err != nil {
-		glog.Errorln("")
-		return
-	}
-	req.Header.Set("Content-type", "application/json;charset=utf8")
-	resp, err := ag.EMClient.Do(req)
-	if err != nil {
-		glog.Errorln("")
-		return
-	}
-
-	defer resp.Body.Close()
-	respContent, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return
-	}
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusInternalServerError {
-			http.Error(w, "fail to update master address", http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(resp.StatusCode)
-		body := make(map[string]interface{})
-		fmt.Println(string(respContent))
-		err = json.Unmarshal(respContent, &body)
+//CheckAuthorition check the cert of request
+func (ph *Handle) CheckAuthorition(this upgradeHandle) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+		err := ph.validateCert(r)
 		if err != nil {
-			glog.Errorf("Get node install info error, %s", err)
+			glog.Error(err.Error())
+			http.Error(w, "No TLS certificate provided", http.StatusUnauthorized)
 			return
 		}
-		fmt.Printf("%#v\n", body)
-		ret, err := json.Marshal(body)
+		name, projectID, err := getUserInfoFromCert(r.TLS.PeerCertificates[0])
 		if err != nil {
-			glog.Errorf("Get node install info error, %s", err)
+			glog.Errorf("Check user info error, project: %s, id: %s, error message: %s", projectID, name, err.Error())
+			http.Error(w, "No Project info in certificate", http.StatusBadRequest)
 			return
 		}
-		io.WriteString(w, string(ret))
-		return
+		nodeID := p.ByName("node_id")
+		if nodeID != name {
+			glog.Errorf("Check user info error, project: %s, id: %s, error message: %s", projectID, name, "NodeID NOT MATCH")
+			http.Error(w, "Node Cert NOT MATCH", http.StatusBadRequest)
+			return
+		}
+		projectIDinURL := p.ByName("project_id")
+		if (projectIDinURL != "") && (projectIDinURL != projectID) {
+			glog.Errorf("Check user info error, project: %s, id: %s, error message: %s", projectID, name, "ProjectID NOT MATCH")
+			http.Error(w, "Project Cert NOT MATCH", http.StatusBadRequest)
+			return
+		}
+		var url string
+		if strings.Contains(r.URL.Path, "nodestatus") {
+			url = fmt.Sprintf(upgradeURLinEdgeMgr+"/nodestatus", projectID, nodeID)
+		} else {
+			installType := p.ByName("type")
+			if (installType != "install") && (installType != "upgrade") {
+				glog.Errorf("Get install plan version info error, project: %s, id: %s, error message: %s", projectID, name, "WRONG INSTALL TYPE")
+				http.Error(w, "Request Path Type NOT TMATCh", http.StatusBadRequest)
+				return
+			}
+			url = fmt.Sprintf(upgradeURLinEdgeMgr+"/%s", projectID, nodeID, installType)
+		}
+		glog.Infof("Request url : %s", url)
+		this(w, r, url)
 	}
-
-	var body InstallInfoResponse
-	fmt.Println(string(respContent))
-	err = json.Unmarshal(respContent, &body)
-	if err != nil {
-		glog.Errorf("Get node install info error, %s", err)
-		return
-	}
-	fmt.Printf("%#v\n", body)
-	ret, err := json.Marshal(body)
-	if err != nil {
-		glog.Errorf("Get node install info error, %s", err)
-		return
-	}
-	io.WriteString(w, string(ret))
 }
 
-func (ag *InstallAgent) EdgeInstallPutNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	nodeID := p.ByName("node_id")
-	glog.Infof("Put node install status request from edged host: %s", r.Host)
-	//err := ag.ValidateCert(r)
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-	//	http.Error(w, "", http.StatusUnauthorized)
-	//	return
-	//}
-	//name, projectID, err := GetUserInfoFromCert(r.TLS.PeerCertificates[0])
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-	//	http.Error(w, "", http.StatusBadRequest)
-	//	return
-	//}
-	projectID := ""
-	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", config.EMUrl, projectID, nodeID)
-	requestBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		glog.Errorf("fail to get node install info")
-		return
+//logUpgrade log of upgrade action
+func logUpgrade(this upgradeHandle) upgradeHandle {
+	return func(w http.ResponseWriter, r *http.Request, url string) {
+		funcName := runtime.FuncForPC(reflect.ValueOf(this).Pointer()).Name()
+		glog.Infoln("Node upgrade func called : ", funcName)
+		glog.Infof("Request from edged host: %s", r.Host)
+		this(w, r, url)
 	}
-	reader := bytes.NewReader(requestBody)
-	req, err := http.NewRequest(http.MethodPut, urlEdgeMgr, reader)
-	glog.Errorf("url ; %#v , Body : %#v", urlEdgeMgr, string(requestBody))
-	if err != nil {
-		glog.Errorf("Put node install status error, %s", err)
-		return
-	}
-	req.Header.Set("Content-type", "application/json;charset=utf8")
-	resp, err := ag.EMClient.Do(req)
-	if err != nil {
-		glog.Errorf("Put node install status error, %s", err)
-		return
-	}
-	if resp.StatusCode != http.StatusOK {
-		return
-	}
-	defer resp.Body.Close()
-	respContent, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return
-	}
-	io.WriteString(w, string(respContent))
 }
 
-func (ag *InstallAgent) EdgeInstallGetNodeStatus(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	nodeID := p.ByName("node_id")
-	glog.Infof("Get node install status request from edged host: %s", r.Host)
-	//err := ag.ValidateCert(r)
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, host: %s, error message: %s", r.Host, err.Error())
-	//	http.Error(w, "", http.StatusUnauthorized)
-	//	return
-	//}
-	//name, projectID, err := GetUserInfoFromCert(r.TLS.PeerCertificates[0])
-	//if err != nil {
-	//	glog.Errorf("fail to get node install info, project: %s, id: %s, error message: %s", projectID, name, err.Error())
-	//	http.Error(w, "", http.StatusBadRequest)
-	//	return
-	//}
-	projectID := ""
-	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr_internal/nodes/%s/installinfo/nodestatus", config.EMUrl, projectID, nodeID)
-	req, err := http.NewRequest(http.MethodGet, urlEdgeMgr, nil)
+func (ph *Handle) installerGetNodeSatus(w http.ResponseWriter, r *http.Request, url string) {
+	url = strings.Join([]string{ph.edgeAPIURL, ph.edgeAPIVersion, url}, "/")
+	req, err := buildRequest(http.MethodGet, url, nil, nil)
 	if err != nil {
-		glog.Errorf("Put node install status error, %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	req.Header.Set("Content-type", "application/json;charset=utf8")
-	resp, err := ag.EMClient.Do(req)
+	resp, err := doRequest(&ph.edgeClient, req)
 	if err != nil {
-		glog.Errorf("Put node install status error, %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if resp.StatusCode != http.StatusOK {
-		return
-	}
-	defer resp.Body.Close()
-	respContent, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return
-	}
-	io.WriteString(w, string(respContent))
+	w.WriteHeader(resp.statusCode)
+	glog.Infoln("Installer node status ret, response :", string(resp.body))
+	fmt.Fprintf(w, string(resp.body))
 }
 
-//
-func (ag *InstallAgent) EdgePost(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	nodeID := p.ByName("post_node_id")
-	projectID := p.ByName("project_id")
-	glog.Infof("Get node install info request from edged host: %s", r.Host)
-	urlEdgeMgr := fmt.Sprintf("%s/v1/%s/edgemgr/nodes/%s/upgrade", config.EMUrl, projectID, nodeID)
-	req, err := http.NewRequest(http.MethodPost, urlEdgeMgr, nil)
-	fmt.Println(urlEdgeMgr)
+func (ph *Handle) installerPutResult(w http.ResponseWriter, r *http.Request, upgradeURLinEdgeMgr string) {
+	upgradeURLinEdgeMgr = strings.Join([]string{ph.edgeAPIURL, ph.edgeAPIVersion, upgradeURLinEdgeMgr}, "/")
+	req, err := buildRequest(http.MethodPut, upgradeURLinEdgeMgr, r.Body, nil)
 	if err != nil {
-		glog.Errorln("Get node install info error.")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	req.Header.Set("Content-type", "application/json;charset=utf8")
-	req.Header.Set("X-Auth-Token", "token")
-	resp, err := ag.EMClient.Do(req)
+	resp, err := doRequest(&ph.edgeClient, req)
 	if err != nil {
-		glog.Errorln("Get node install info error.")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if resp.StatusCode != http.StatusOK {
+	w.WriteHeader(resp.statusCode)
+	glog.Infoln("Installer put upgrade result , response :", string(resp.body))
+	fmt.Fprintf(w, string(resp.body))
+}
+
+func (ph *Handle) installerGetVersion(w http.ResponseWriter, r *http.Request, upgradeURLinEdgeMgr string) {
+	upgradeURLinEdgeMgr = strings.Join([]string{ph.edgeAPIURL, ph.edgeAPIVersion, upgradeURLinEdgeMgr}, "/")
+	req, err := buildRequest(http.MethodPost, upgradeURLinEdgeMgr, r.Body, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	resp, err := doRequest(&ph.edgeClient, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(resp.statusCode)
+	glog.Infoln("Installer get plan version , response :", string(resp.body))
+	fmt.Fprintf(w, string(resp.body))
+}
+
+func buildRequest(method, path string, body io.Reader, headers header) (req *http.Request, err error) {
+	if body != nil {
+		requestBody, err := ioutil.ReadAll(body)
+		if err != nil {
+			glog.Errorf("Build request error, %s", err.Error())
+			return nil, err
+		}
+		body = bytes.NewReader(requestBody)
+	}
+	expectedPayload := (method == "POST" || method == "PUT")
+	if expectedPayload && body == nil {
+		body = bytes.NewReader([]byte{})
+	}
+	req, err = http.NewRequest(method, path, body)
+	if err != nil {
+		return nil, err
+	}
+	if headers != nil {
+		for k, v := range headers {
+			req.Header[k] = v
+		}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Auth-Token", IAMToken)
+	glog.Infoln("New request : ", path)
+	return
+}
+
+func doRequest(cli *http.Client, r *http.Request) (serverResp serverResponse, err error) {
+	serverResp = serverResponse{statusCode: -1}
+	resp, err := cli.Do(r)
+	if err != nil {
+		glog.Errorf("Do request error, %s", err.Error())
+		return serverResp, err
+	}
+	serverResp.statusCode = resp.StatusCode
 	defer resp.Body.Close()
-	io.WriteString(w, "success")
+	serverResp.body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorln("Get response error", err.Error())
+		return serverResp, err
+	}
+	return
 }
 
 // StartServer starts the node_install_agent service
@@ -249,10 +221,9 @@ func StartServer() {
 	}
 
 	muxNew := httprouter.New()
-	muxNew.POST("/v1/placement_external/nodes/:node_id/installinfo/:type", ag.EdgeInstallPost)
-	muxNew.PUT("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", ag.EdgeInstallPutNodeStatus)
-	muxNew.GET("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", ag.EdgeInstallGetNodeStatus)
-	muxNew.POST("/v1/placement_external/nodes/:node_id/upgrade", ag.EdgePost)
+	muxNew.POST("/v1/placement_external/nodes/:node_id/installinfo/:type", ph.CheckAuthorition(logUpgrade(ph.installerGetVersion)))
+	muxNew.PUT("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", ph.CheckAuthorition(logUpgrade(ph.installerPutResult)))
+	muxNew.GET("/v1/placement_external/nodes/:node_id/installinfo/nodestatus", ph.CheckAuthorition(logUpgrade(ph.installerGetNodeSatus)))
 
 	s := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", config.ServerIP, config.ServerPort),
